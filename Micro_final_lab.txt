@@ -1,0 +1,270 @@
+MPS PROJECT HARD(100 point) 
+Design an embedded system using ATmega32 to design the digital clock,the system use port D to interface with LCD.Port C to interface with 7 buttons.Assume that,the XTAL clock=8 MHz.Develop the program Using Timer0 interrupt ISR(TIMERO_OVF_vect)generated in 100ms interval,normal mode,with prescaler=1024.
+
+ a) The LCD to display the digital clock in format hh:mm:ss.xx in the first line.Use 3 buttons to adjust the current time hh:mm:ss. 
+
+b) The second line of LCD display the alarm time which can be adjusted by other 3 buttons.When the clock and alarm time are equal,turn on the Buzzer which is connected to PORTB.7.The buzzer will be turn off by pressing a button.
+
+
+/* Võ Quang Trấn, Nguyễn Hoàng Tân, Đinh Hoàng Sáng */
+/* Atmega32-Finalprject-Clock and Alarm in AVR programer-C language */
+
+#include <avr/io.h>
+#define F_CPU 16000000UL // XCrytal
+#include <util/delay.h>
+#include <stdlib.h>
+#include <avr/interrupt.h>	
+#include "lcd.h"  // 4-bit
+#include <stdbool.h> // boolean library
+
+static volatile uint8_t SEC =0;
+static volatile uint8_t MIN =0;
+static volatile uint8_t HOU =0;
+static volatile uint8_t MSEC =0;
+
+int main(void)
+{	
+	LCDInit(LS_BLINK);
+	DDRC = 0x00; // button trigger low
+	PORTC = 0xFF; // high all port C
+	DDRB = 0x80; //output B.7
+	PORTB = 0x7F; // buzzer control B.7
+	PORTD = 0x00; // low all portD 
+	
+	TCNT1H = 0xF9;
+	TCNT1L = 0xE5;
+	TCCR1A = 0x00; // normal mode
+	TCCR1B = 0x05; // prescale 1024
+	
+	TIMSK = (1<<TOIE1); 
+	sei();
+	
+	
+	char SHOWSEC [2];
+	char SHOWMIN [2];
+	char SHOWHOU [2];
+	char SHOWMSEC[1];
+	uint8_t ALSEC = 0;
+	uint8_t ALMIN = 0;
+	uint8_t ALHOU = 0;
+	char SHOWALSEC [2];
+	char SHOWALMIN [2];
+	char SHOWALHOU [2];
+	bool status = false;
+	LCDClear(); 
+	
+	while(1)
+	{
+		
+		itoa(HOU/10,SHOWHOU,10);
+		LCDWriteString(SHOWHOU);
+		itoa(HOU%10,SHOWHOU,10);
+		LCDWriteString(SHOWHOU);
+		LCDWriteString(":");
+		LCDGotoXY(3,0);
+		itoa(MIN/10,SHOWMIN,10);
+		LCDWriteString(SHOWMIN);
+		itoa(MIN%10,SHOWMIN,10);
+		LCDWriteString(SHOWMIN);
+		LCDGotoXY(5,0);
+		LCDWriteString(":");
+		LCDGotoXY(6,0);
+		itoa(SEC/10,SHOWSEC,10);
+		LCDWriteString(SHOWSEC);
+		itoa(SEC%10,SHOWSEC,10);
+		LCDWriteString(SHOWSEC);
+		LCDWriteString(".");
+		LCDGotoXY(9,0);
+		itoa(MSEC,SHOWMSEC,10);
+		LCDWriteString(SHOWMSEC);
+		LCDGotoXY(11,0);
+		
+		if ((PINC==0b01111111) && (status==false)) 
+		{
+			status = true;
+			_delay_ms(400);
+		}
+		if ((PINC==0b01111111) && (status==true)) 
+		{
+			status = false;
+			_delay_ms(400);
+		}
+		
+		if (status==true)
+		{
+			LCDWriteString("ON ");
+			if ((ALHOU==HOU)&(ALMIN==MIN)&(ALSEC==SEC))
+			{
+				PORTB|=(1<<PINB7); // buzzer on
+			}
+		}
+		else
+		{
+			LCDWriteString("OFF");
+			PORTB &= ~(1<<PINB7); // buzzer off
+		}
+		
+		LCDGotoXY(0,1);
+		LCDWriteString("ALARM:");
+		LCDGotoXY(7,1);
+
+		itoa(ALHOU/10,SHOWALHOU,10);
+		LCDWriteString(SHOWALHOU);
+		itoa(ALHOU%10,SHOWALHOU,10);
+		LCDWriteString(SHOWALHOU);
+		LCDGotoXY(9,1);
+		LCDWriteString(":");
+		LCDGotoXY(10,1);
+
+		itoa(ALMIN/10,SHOWALMIN,10);
+		LCDWriteString(SHOWALMIN);
+		itoa(ALMIN%10,SHOWALMIN,10);
+		LCDWriteString(SHOWALMIN);
+		LCDGotoXY(12,1);
+		LCDWriteString (":");
+		LCDGotoXY(13,1);
+		
+		itoa(ALSEC/10,SHOWALSEC,10);
+		LCDWriteString(SHOWALSEC);
+		itoa(ALSEC%10,SHOWALSEC,10);
+		LCDWriteString(SHOWALSEC);
+		LCDGotoXY(0,0);
+		
+		//clock
+		if (PINC==0b11111110) // button second
+		{
+			if (SEC<60)
+			{
+				SEC++;
+				_delay_ms(400);
+			}
+			if (SEC==60)
+			{
+				if (MIN<60)
+				{
+					MIN++;
+				}
+				SEC=0;
+				_delay_ms(400);
+			}
+		}
+		
+		if (PINC==0b11111101) // button minute
+			{
+				if (MIN<60)
+				{
+					MIN++;
+					_delay_ms(400);
+				}
+				if (MIN==60)
+				{
+					if (HOU<24)
+					{
+						HOU++;
+					}
+					MIN=0;
+					_delay_ms(400);
+				}
+			}		
+			if (PINC==0b11111011) // button hour
+			{
+				if (HOU<24)
+				{
+					HOU++;
+				}
+				_delay_ms(400);
+				if (HOU==24)
+				{
+					HOU=0;
+				}
+			}
+		//alarm	
+		if (PINC==0b11110111) // button alarm second
+		{
+			if (ALSEC<60)
+			{
+				ALSEC++;
+				_delay_ms(400);
+			}
+			if (ALSEC==60)
+			{
+				if (ALMIN<60)
+				{
+					ALMIN++;
+				}
+				ALSEC=0;
+				_delay_ms(400);
+			}
+		}
+		
+			if (PINC==0b11101111) // button alarm minute
+			{
+				if (ALMIN<60)
+				{
+					ALMIN++;
+					_delay_ms(400);
+				}
+				if (ALMIN==60)
+				{
+					if (ALHOU<24)
+					{
+						ALHOU++;
+					}
+					ALMIN=0;
+					_delay_ms(400);
+				}
+			}
+			
+			if (PINC==0b11011111) // button hour alarm
+			{
+				if (ALHOU<24)
+				{
+					ALHOU++;
+				}
+				_delay_ms(400);
+				if (ALHOU==24)
+				{
+					ALHOU=0;
+				}
+			}
+		}
+	}
+
+ISR(TIMER1_OVF_vect) // each 100ms 
+{	
+	TCNT1H = 0xF9;
+	TCNT1L = 0xE5;
+	if (MSEC<10)
+	{
+		MSEC++;
+	}
+	if (MSEC==10)
+	{
+		if (SEC<60)
+		{
+			SEC++;
+		}
+		MSEC=0;
+	}
+	if (SEC==60)
+	{
+		if (MIN<60)
+		{
+			MIN++;
+		}
+		SEC=0;
+	}
+	if (MIN==60)
+	{
+		if (HOU<24)
+		{
+			HOU++;
+		}
+		MIN=0;
+	}
+	if (HOU==24)
+	{
+		HOU=0;
+	}
+
+}
